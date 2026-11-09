@@ -1,5 +1,7 @@
 # Muru · A little artificial curiosity
 
+It is live at: https://anttiluode.github.io/Muru/
+
 **[Offline laboratory source](index.html)** · [GitHub repository](https://github.com/anttiluode/Muru) · [Measured v1 results](RESULTS.md) · [Research constraints](#what-is-real-and-what-is-not)
 
 An experiment in building a *pet* from computation rather than a character-playing chatbot. Muru lives in a 24×16 hidden world, chooses individual pixels to measure, learns a modest preference from useful observations, and has two tiny attention networks that can rewrite each other's fast weights.
