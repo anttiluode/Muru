@@ -1,7 +1,7 @@
 /* Muru browser laboratory. Offline: no external imports, calls, uploads or dependencies. */
 (function(){'use strict';
 const $=id=>document.getElementById(id);
-const C=window.MuruCore;if(!C){document.body.textContent='Missing core.js';return;}
+const C=window.MuruCore,D=window.MuruDiagnostics;if(!C||!D){document.body.textContent='Missing core.js or diagnostics.js';return;}
 let pet=new C.Muru({seed:1047,worldSeed:71}),showTruth=false,playing=false,worldSerial=71,trace=[];
 const storage='muru.v1.habit'; // Keep v1 storage key for automatic migration to v2.try{pet.loadHabit(JSON.parse(localStorage.getItem(storage)));}catch(_){}
 function persist(){try{localStorage.setItem(storage,JSON.stringify(pet.saveHabit()));}catch(_){}}
@@ -60,6 +60,7 @@ function renderMatrices(){function draw(id,values,scale){const canvas=$(id),c=ct
  draw('eyeMatrix',delta(pet.eye),.26);draw('bodyMatrix',delta(pet.body),.26);draw('bodyMemory',pet.bodyMemory,.55);
  $('eyeDrift').textContent=pet.eye.drift().toFixed(4);$('bodyDrift').textContent=pet.body.drift().toFixed(4);
  $('memoryRms').textContent=pet.energies.bodyMemoryRms.toFixed(4);
+ for(const [id,m] of [['rankEye',delta(pet.eye)],['rankBody',delta(pet.body)],['rankMemory',pet.bodyMemory]]){const s=D.matrixStats(m);$(id).textContent='Effective rank: '+s.effectiveRank.toFixed(2)+' / 16 · Row uniformity: '+s.rowUniformity.toFixed(2);}
  $('regulation').textContent=`${pet.bodyGuide.some(x=>x!==0)?'ON':'OFF'} · Eye plasticity ×${pet.bodyPlasticity.toFixed(2)}`;
 }
 function renderBeliefs(){const root=$('hypotheses');root.replaceChildren();C.FAMILIES.forEach((name,i)=>{
@@ -92,5 +93,81 @@ $('benchmark').addEventListener('click',async()=>{const button=$('benchmark'),ou
  result.forEach(r=>{const tr=document.createElement('tr');for(const val of [r.mode,r.policy,r.psnr.toFixed(2)+' dB',r.entropy.toFixed(4)]){const td=document.createElement('td');td.textContent=val;tr.append(td);}table.append(tr);});out.replaceChildren(table);
  const note=document.createElement('p');note.textContent='The Bayesian variance policy has direct access to the candidate hypothesis predictions, not the hidden answers. Score uses hidden truth only AFTER measurement. Real learning advantage is not assumed.';out.append(note);
  }catch(e){out.textContent='Benchmark failed: '+e.message;}finally{button.disabled=false;}});
+
+let rankResult=null;
+function drawRankChart(){
+ const canvas=$('rankChart'),c=ctx('rankChart'),w=canvas.width,h=canvas.height;
+ const key=$('rankMatrix').value,metric=$('rankMetric').value,max=metric==='effectiveRank'?16:1;
+ c.clearRect(0,0,w,h);c.fillStyle='#0a1f18';c.fillRect(0,0,w,h);
+ const L=62,R=w-22,T=20,B=h-47;
+ c.font='13px sans-serif';c.lineWidth=1;
+ for(let i=0;i<=4;i++){
+  const y=B-(B-T)*i/4;
+  c.strokeStyle='#35574b';c.beginPath();c.moveTo(L,y);c.lineTo(R,y);c.stroke();
+  c.fillStyle='#93c0ae';c.fillText(metric==='effectiveRank'?String(i*4):(i/4).toFixed(2),8,y+4);
+ }
+ for(let i=0;i<=4;i++){const x=L+(R-L)*i/4;c.fillStyle='#93c0ae';c.fillText(String(i*24),x-9,B+21);}
+ for(const marker of [{at:24,text:'CLAMP 24',color:'#ffb18c'},{at:48,text:'NEW WORLD 48',color:'#d6e9be'}]){
+  const x=L+(R-L)*marker.at/96;c.strokeStyle=marker.color;c.setLineDash([5,5]);c.beginPath();c.moveTo(x,T);c.lineTo(x,B);c.stroke();c.setLineDash([]);
+  c.font='11px sans-serif';c.fillStyle=marker.color;c.fillText(marker.text,x+5,T+13);c.font='13px sans-serif';
+ }
+ if(!rankResult){c.fillStyle='#a4c9b5';c.font='18px sans-serif';c.fillText('No observations replayed yet',L+95,(T+B)/2);return;}
+ const colors=['#73e6c5','#ffb18c','#9eacff'];
+ rankResult.series.forEach((series,i)=>{
+  c.strokeStyle=colors[i];c.lineWidth=3;c.setLineDash(i===0?[]:i===1?[9,5]:[2,6]);c.beginPath();
+  series.samples.forEach((s,j)=>{
+   const x=L+(R-L)*s.look/96;
+   const value=s[key][metric],y=B-(B-T)*Math.max(0,Math.min(1,value/max));
+   if(j)c.lineTo(x,y);else c.moveTo(x,y);
+  });c.stroke();c.setLineDash([]);
+ });
+}
+function renderRankSummary(){
+ if(!rankResult)return;
+ const out=$('rankSummary'),key=$('rankMatrix').value,metric=$('rankMetric').value;
+ out.replaceChildren();
+ const title=document.createElement('p');title.textContent='Five seeds; 48 looks in each world. Means ± between-seed standard deviation. The event at look 48 includes an immediate post-reset measurement.';out.append(title);
+ const table=document.createElement('table'),head=document.createElement('tr');
+ for(const label of ['Intervention','Look 24','After world switch','Look 96']){
+  const th=document.createElement('th');th.textContent=label;head.append(th);
+ }
+ table.append(head);
+ for(const series of rankResult.series){
+  const tr=document.createElement('tr'),vals=[series.label];
+  for(const predicate of [
+   s=>s.look===24&&s.event==='look',
+   s=>s.look===48&&s.event==='world_switch',
+   s=>s.look===96&&s.event==='look'
+  ]){
+   const item=series.samples.find(predicate);
+   vals.push(item?(item[key][metric].toFixed(2)+' ± '+item[key][metric+'Sd'].toFixed(2)):'—');
+  }
+  for(const v of vals){const td=document.createElement('td');td.textContent=v;tr.append(td);}
+  table.append(tr);
+ }
+ out.append(table);
+ const foot=document.createElement('p');
+ foot.textContent=metric==='effectiveRank'?
+  'Rank 1 means one singular direction dominates; rank 16 means equal energy in all 16 directions. A zero-change matrix has rank 0.' :
+  metric==='rowUniformity'?'1 means all rows are identical; values near 0 mean row averages cancel or differ substantially.' :
+  'Near 1 means one singular direction dominates. The value is not a measure of accuracy.';
+ out.append(foot);
+}
+$('rankRun').addEventListener('click',async()=>{
+ const button=$('rankRun');button.disabled=true;$('rankSummary').textContent='Replaying 5 seeds × 3 interventions × 96 matched observations…';await new Promise(resolve=>setTimeout(resolve,40));
+ try{rankResult=D.runRankExperiment();drawRankChart();renderRankSummary();$('rankExport').disabled=false;}
+ catch(e){$('rankSummary').textContent='Matrix experiment failed: '+e.message;}
+ finally{button.disabled=false;}
+});
+for(const id of ['rankMatrix','rankMetric'])$(id).addEventListener('change',()=>{drawRankChart();renderRankSummary();});
+$('rankExport').addEventListener('click',()=>{
+ if(!rankResult)return;
+ const blob=new Blob([JSON.stringify(rankResult,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='muru-v3-rank-clamp-matched-observations.json';a.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+drawRankChart();
+
 syncControls();trace=[{entropy:Math.log(C.FAMILIES.length),psnr:pet.snapshot().psnr}];render();requestAnimationFrame(renderPortrait);
 })();

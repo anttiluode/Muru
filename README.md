@@ -1,6 +1,6 @@
-# Muru v2 · An Eye that forgets, a Body that remembers
+# Muru v3 · An Eye that forgets, a Body that remembers
 
-**[Open Muru](https://anttiluode.github.io/Muru/)** · [Offline entry point](index.html) · [v2 measurements](RESULTS_V2.md) · [v1 measurements](RESULTS.md)
+**[Open Muru](https://anttiluode.github.io/Muru/)** · [Offline entry point](index.html) · [v3 pillar experiment](RESULTS_RANK.md) · [v2 measurements](RESULTS_V2.md) · [v1 measurements](RESULTS.md)
 
 Muru is an **offline research pet**, not an LLM pretending to have feelings. Two small, *untrained* attention networks now have asymmetrical jobs: the Eye briefly senses the outside world; the Body retains only processed signals received from the Eye, and can regulate the Eye's future attention and fast-weight plasticity. Every mechanism is inspectable in plain JavaScript.
 
@@ -13,6 +13,17 @@ Open `index.html` in Chrome, Edge or Firefox. No build tools, network, cloud GPU
 3. **Switch coupling:** `mutual`, `eye → body`, `body → eye`, `clamped`. Clamping stops cross-writes and disables Body steering. Eye→Body *sensory communication stays on*, even when weight coupling is clamped.
 4. **Dream 20:** run the internal loop and rehearse the simple preference trace without reading any new pixels. Dreams **do not** inject archived pixels back into the Eye or Body memory.
 5. **Run 5-world comparison:** benchmark random, raster, Bayesian variance, and Muru on equal observation budgets. **Do not assume that Muru beats the baseline.**
+
+### Pillar experiment (v3)
+
+The new **04 / PILLAR EXPERIMENT** panel measures two different properties of each 16×16 matrix:
+
+- **Effective rank** of the squared singular-value spectrum, from 0 for an exactly zero matrix to 16 for evenly spread singular energy. A rank near 1 means one dominant direction.
+- **Row uniformity**, the fraction of row energy explained by the mean row. Identical rows give 1; heterogeneous or cancelling rows give a smaller value.
+
+The two weight matrices are measured as **changes from their original weights**, while the third matrix is the actual Body slow-memory bank. The panel plots *mutual*, *clamped after look 24*, and *clamped from the start*, with the exact same 96 observations and the same new world after look 48. It does not overwrite your live pet. A clamp stops feedback writes but leaves the Body's sensory uplink active. Thus a clamped memory can still respond to the Eye.
+
+Use the selector to compare rank, row uniformity, or largest singular-energy share; export all seed-level measurements as JSON. See [RESULTS_RANK.md](RESULTS_RANK.md) for the interpretation and [diagnostics.js](diagnostics.js) for the full reproducible measurement procedure. This diagnoses *matrix geometry*, **not** automatically learned information or a performance gain.
 
 ### Architecture: the missing division of labor
 
@@ -71,7 +82,8 @@ The former *twin inputs* shortcut is gone. [RESULTS_V2.md](RESULTS_V2.md) record
 ```bash
 node --check core.js
 node --check app.js
-node --test tests/core.test.cjs
+node --check diagnostics.js
+node --test tests/*.test.cjs
 ```
 
 Node 22+ recommended for tests; browser works without Node. GitHub Actions runs the same checks. Sources: [`core.js`](core.js) (simulation), [`app.js`](app.js) (UI), [`tests/core.test.cjs`](tests/core.test.cjs).

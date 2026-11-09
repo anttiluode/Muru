@@ -13,5 +13,6 @@ jobs:
           node-version: '22'
       - run: node --check core.js
       - run: node --check app.js
-      - run: node --test tests/core.test.cjs
+      - run: node --check diagnostics.js
+      - run: node --test tests/*.test.cjs
 
