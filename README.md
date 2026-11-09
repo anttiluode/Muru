@@ -84,6 +84,7 @@ node --check core.js
 node --check app.js
 node --check diagnostics.js
 node --test tests/*.test.cjs
+node scripts/rank_report.cjs
 ```
 
 Node 22+ recommended for tests; browser works without Node. GitHub Actions runs the same checks. Sources: [`core.js`](core.js) (simulation), [`app.js`](app.js) (UI), [`tests/core.test.cjs`](tests/core.test.cjs).
