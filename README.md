@@ -1,6 +1,6 @@
 # Muru · A little artificial curiosity
 
-**[Open the offline laboratory](index.html)** · [GitHub repository](https://github.com/anttiluode/Muru) · [Research constraints](#what-is-real-and-what-is-not)
+**[Open the offline laboratory](index.html)** · [GitHub repository](https://github.com/anttiluode/Muru) · [Measured v1 results](RESULTS.md) · [Research constraints](#what-is-real-and-what-is-not)
 
 An experiment in building a *pet* from computation rather than a character-playing chatbot. Muru lives in a 24×16 hidden world, chooses individual pixels to measure, learns a modest preference from useful observations, and has two tiny attention networks that can rewrite each other's fast weights.
 
@@ -31,7 +31,7 @@ Download this repository and **open `index.html` in your browser**. No server, G
 
 > Can mutually coupled changing weight matrices influence where an active sensing agent chooses to look, and can their coupled dynamics exhibit behavior that disappears when a feedback direction is clamped?
 
-**A visual difference between mutual and clamped behavior alone is not evidence of emergent intelligence or autonomous learning.** It can simply result from an explicit state perturbation. The included controls make this distinction inspectable. A stronger follow-up experiment should isolate the coupled subsystem, replay an *identical fixed input stream*, compare attractors and clamp interventions, and report results over many seeds.
+**First outcome: no meaningful advantage in the initial five-world benchmark; see [RESULTS.md](RESULTS.md).** A visual difference between mutual and clamped behavior alone is not evidence of emergent intelligence or autonomous learning. It can simply result from an explicit state perturbation. The included controls make this distinction inspectable. A stronger follow-up experiment should isolate the coupled subsystem, replay an *identical fixed input stream*, compare attractors and clamp interventions, and report results over many seeds.
 
 ## What is real and what is not
 

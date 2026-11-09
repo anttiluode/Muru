@@ -62,7 +62,7 @@ class AttentionBrain{
 }
 class Muru{
  constructor(options={}){this.seed=options.seed||314159;this.w=options.w||24;this.h=options.h||16;this.rand=rng(this.seed^0x678ba);this.eye=new AttentionBrain(this.seed+7);this.body=new AttentionBrain(this.seed+11);this.preferences=new Array(8).fill(0);this.archive=[];this.episodes=0;this.steps=0;this.dreams=0;this.lastGain=0;this.coupling=.65;this.writeRate=.18;this.mode='mutual';this.policy='muru';this.lastChoice=-1;this.mood='watching';this.curiosity=1;this.newWorld(options.worldSeed||91,options.kind);}
- newWorld(seed=this.seed+this.episodes*37,kind){this.world=makeScene(seed,this.w,this.h,kind);this.episodes++;this.obs=new Map();this.lastChoice=-1;this.history=[];this.posterior=new Array(FAMILIES.length).fill(1/FAMILIES.length);this.logs=new Array(FAMILIES.length).fill(0);this.updateBrains(null);return this.snapshot();}
+ newWorld(seed=this.seed+this.episodes*37,kind){this.world=makeScene(seed,this.w,this.h,kind);this.episodes++;this.obs=new Map();this.lastChoice=-1;this.history=[];this.posterior=new Array(FAMILIES.length).fill(1/FAMILIES.length);this.logs=new Array(FAMILIES.length).fill(0);this.updateBrains(null,false);return this.snapshot();}
  // Token construction uses ONLY templates, observations and model state.
  tokens(){const tokens=[];for(let k=0;k<5;k++){const t=new Array(D).fill(0);t[0]=this.posterior[k]*3;t[1]=k/5;t[2]=Math.sin(k*1.9);t[3]=Math.cos(k*1.9);t[4]=entropy(this.posterior);t[10]=this.preferences[k];tokens.push(t);}
   const recent=this.history.slice(-11);for(let t=0;t<11;t++){
@@ -70,10 +70,10 @@ class Muru{
     tokens.push(v);
   }return tokens;
  }
- updateBrains(input){const tokens=this.tokens();const bodyTokens=tokens.map((v,i)=>v.map((z,j)=>z*(j%3===0?-.8:1)+(j===7?this.preferences[i%8]:0)));
+ updateBrains(input,allowWrite=true){const tokens=this.tokens();const bodyTokens=tokens.map((v,i)=>v.map((z,j)=>z*(j%3===0?-.8:1)+(j===7?this.preferences[i%8]:0)));
   const a=this.eye.forward(tokens),b=this.body.forward(bodyTokens);
-  if(this.mode==='mutual'||this.mode==='eye-to-body')this.body.writeFrom(a,this.coupling,this.writeRate);
-  if(this.mode==='mutual'||this.mode==='body-to-eye')this.eye.writeFrom(b,this.coupling,this.writeRate);
+  if(allowWrite&&(this.mode==='mutual'||this.mode==='eye-to-body'))this.body.writeFrom(a,this.coupling,this.writeRate);
+  if(allowWrite&&(this.mode==='mutual'||this.mode==='body-to-eye'))this.eye.writeFrom(b,this.coupling,this.writeRate);
   this.energies={eye:this.eye.energy(),body:this.body.energy(),eyeDrift:this.eye.drift(),bodyDrift:this.body.drift()};
  }
  predict(){const p=new Array(this.w*this.h).fill(0);for(let k=0;k<FAMILIES.length;k++)for(let i=0;i<p.length;i++)p[i]+=this.posterior[k]*this.world.templates[k][i];return p;}
