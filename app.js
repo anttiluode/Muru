@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id);
 const C=window.MuruCore;if(!C){document.body.textContent='Missing core.js';return;}
 let pet=new C.Muru({seed:1047,worldSeed:71}),showTruth=false,playing=false,worldSerial=71,trace=[];
-const storage='muru.v1.habit';try{pet.loadHabit(JSON.parse(localStorage.getItem(storage)));}catch(_){}
+const storage='muru.v1.habit'; // Keep v1 storage key for automatic migration to v2.try{pet.loadHabit(JSON.parse(localStorage.getItem(storage)));}catch(_){}
 function persist(){try{localStorage.setItem(storage,JSON.stringify(pet.saveHabit()));}catch(_){}}
 const ctx=(id)=>$(id).getContext('2d');
 function color(v,brightness=1){v=Math.max(0,Math.min(1,v));const low=[14,55,59],mid=[41,138,121],hi=[190,250,178],top=[254,224,146];let a,b,t;
@@ -54,17 +54,20 @@ function renderTrace(){const canvas=$('trace'),c=ctx('trace'),W=canvas.width,H=c
  curve('entropy',Math.log(5),'#64e6ca');curve('psnr',32,'#fbb094');
  c.fillStyle='#abcdbf';c.font='13px sans-serif';c.fillText('LOOK 0',40,H-8);c.fillText(`LOOK ${Math.max(trace.length-1,24)}`,W-105,H-8);
 }
-function renderMatrices(){function one(id,brain){const canvas=$(id),c=ctx(id),size=canvas.width/C.D;
-  for(let i=0;i<C.D;i++)for(let j=0;j<C.D;j++){const value=brain.V[i][j]-brain.baseV[i][j],z=Math.min(1,Math.abs(value)/.26);c.fillStyle=value>=0?`rgb(${Math.round(15+z*111)},${Math.round(38+z*195)},${Math.round(32+z*163)})`:`rgb(${Math.round(32+z*197)},${Math.round(36+z*95)},${Math.round(41+z*101)})`;c.fillRect(j*size,i*size,size+.5,size+.5);}}
- one('eyeMatrix',pet.eye);one('bodyMatrix',pet.body);
+function renderMatrices(){function draw(id,values,scale){const canvas=$(id),c=ctx(id),size=canvas.width/C.D;
+  for(let i=0;i<C.D;i++)for(let j=0;j<C.D;j++){const value=values[i][j],z=Math.min(1,Math.abs(value)/scale);c.fillStyle=value>=0?`rgb(${Math.round(15+z*111)},${Math.round(38+z*195)},${Math.round(32+z*163)})`:`rgb(${Math.round(32+z*197)},${Math.round(36+z*95)},${Math.round(41+z*101)})`;c.fillRect(j*size,i*size,size+.5,size+.5);}}
+ const delta=brain=>brain.V.map((row,i)=>row.map((v,j)=>v-brain.baseV[i][j]));
+ draw('eyeMatrix',delta(pet.eye),.26);draw('bodyMatrix',delta(pet.body),.26);draw('bodyMemory',pet.bodyMemory,.55);
  $('eyeDrift').textContent=pet.eye.drift().toFixed(4);$('bodyDrift').textContent=pet.body.drift().toFixed(4);
+ $('memoryRms').textContent=pet.energies.bodyMemoryRms.toFixed(4);
+ $('regulation').textContent=`${pet.bodyGuide.some(x=>x!==0)?'ON':'OFF'} · Eye plasticity ×${pet.bodyPlasticity.toFixed(2)}`;
 }
 function renderBeliefs(){const root=$('hypotheses');root.replaceChildren();C.FAMILIES.forEach((name,i)=>{
  const container=document.createElement('div'),header=document.createElement('div'),label=document.createElement('span'),pct=document.createElement('strong'),bg=document.createElement('div'),bar=document.createElement('div');
  header.className='bar-header';label.textContent=name;pct.textContent=(pet.posterior[i]*100).toFixed(1)+'%';header.append(label,pct);bg.className='bar-bg';bar.className='bar-fg';bar.style.width=(pet.posterior[i]*100).toFixed(3)+'%';bg.append(bar);container.append(header,bg);root.append(container);
  });const winner=pet.posterior.indexOf(Math.max(...pet.posterior));$('beliefCaption').textContent=pet.obs.size?`Most likely: ${C.FAMILIES[winner]}. The world really is ${C.FAMILIES[pet.world.kind]}, but Muru only knows what its measurements support.`:'A blank slate: all five candidate worlds equally plausible.';
 }
-function renderHabit(){const root=$('habit');root.replaceChildren();pet.preferences.forEach(x=>{const bar=document.createElement('span');bar.className=x<0?'negative':'';bar.style.height=`${Math.round(7+Math.abs(x)*42)}px`;bar.title=x.toFixed(4);root.append(bar);});$('dreamCounter').textContent=`${pet.dreams} dream ticks · ${pet.archive.length} remembered observations. Habits persist in local browser storage; fast-weight changes reset on reload.`;}
+function renderHabit(){const root=$('habit');root.replaceChildren();pet.preferences.forEach(x=>{const bar=document.createElement('span');bar.className=x<0?'negative':'';bar.style.height=`${Math.round(7+Math.abs(x)*42)}px`;bar.title=x.toFixed(4);root.append(bar);});$('dreamCounter').textContent=`${pet.dreams} dream ticks · ${pet.archive.length} remembered observations. Habits and Body's slow memory persist in browser storage; the Eye's short sensory trace resets on reload.`;}
 function render(){const s=pet.snapshot();$('looks').innerHTML=`${s.looks} <small>/ ${pet.w*pet.h}</small>`;$('uncertainty').innerHTML=`${s.entropy.toFixed(3)} <small>nats</small>`;$('psnr').innerHTML=`${s.psnr.toFixed(2)} <small>dB PSNR</small>`;$('drift').innerHTML=`${((s.energies.eyeDrift+s.energies.bodyDrift)/2).toFixed(4)} <small>RMS</small>`;
  $('mood').textContent=s.mood;$('sceneLabel').textContent=`WORLD #${s.seed} · ${s.looks} samples`;$('linkLabel').textContent={mutual:'mutual write','eye-to-body':'eye → body','body-to-eye':'body → eye',clamped:'no write'}[pet.mode];
  renderWorld();renderTrace();renderMatrices();renderBeliefs();renderHabit();
@@ -81,7 +84,7 @@ $('dream').addEventListener('click',()=>{pet.dream(20);persist();render();});
 $('newWorld').addEventListener('click',()=>{playing=false;worldSerial+=Math.floor(7+Math.random()*10000);pet.newWorld(worldSerial);trace=[{entropy:Math.log(C.FAMILIES.length),psnr:pet.snapshot().psnr}];render();});
 $('peek').addEventListener('change',e=>{showTruth=e.target.checked;renderWorld();});
 $('reset').addEventListener('click',()=>{playing=false;pet.resetMind();trace=[];syncControls();try{localStorage.removeItem(storage);}catch(_){}render();});
-$('download').addEventListener('click',()=>{const data=JSON.stringify({...pet.saveHabit(),meta:{project:'Muru v1',date:new Date().toISOString(),notAPretrainedModel:true}},null,2);const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='muru-memory.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+$('download').addEventListener('click',()=>{const data=JSON.stringify({...pet.saveHabit(),meta:{project:'Muru v2',date:new Date().toISOString(),notAPretrainedModel:true}},null,2);const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='muru-v2-memory.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('policy').addEventListener('change',()=>{syncControls();render();});$('mode').addEventListener('change',()=>{syncControls();render();});
 for(const id of ['coupling','curiosity'])$(id).addEventListener('input',()=>{syncControls();render();});
 $('benchmark').addEventListener('click',async()=>{const button=$('benchmark'),out=$('benchmarkResults');button.disabled=true;out.textContent='Running 5 worlds × 4 policies × 2 coupling modes × 12 looks…';await new Promise(r=>setTimeout(r,50));
@@ -91,4 +94,3 @@ $('benchmark').addEventListener('click',async()=>{const button=$('benchmark'),ou
  }catch(e){out.textContent='Benchmark failed: '+e.message;}finally{button.disabled=false;}});
 syncControls();trace=[{entropy:Math.log(C.FAMILIES.length),psnr:pet.snapshot().psnr}];render();requestAnimationFrame(renderPortrait);
 })();
-

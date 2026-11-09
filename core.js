@@ -1,10 +1,10 @@
-/* Muru Core v1 — deterministic, no-dependency active sensing and coupled attention.
+/* Muru Core v2 — deterministic, no-dependency active sensing and coupled attention.
  * MIT license; browser global MuruCore and Node module.exports.
  * Not a pretrained language model: both attention networks begin with seeded random weights.
  */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.MuruCore=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
 'use strict';
-const D=16,T=16,FAMILIES=['Bloom','Tide','Islands','Crystal','Vortex'];
+const D=16,T=16,EYE_SPAN=4,FAMILIES=['Bloom','Tide','Islands','Crystal','Vortex'];
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function rng(seed){let a=(seed|0)>>>0;return()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
 function normal(rand){return Math.sqrt(-2*Math.log(Math.max(rand(),1e-12)))*Math.cos(2*Math.PI*rand());}
@@ -40,6 +40,8 @@ function makeScene(seed=1,w=24,h=16,kind){
 }
 class AttentionBrain{
  constructor(seed){const rand=rng(seed);this.baseV=mat(rand,.16);this.V=copy(this.baseV);this.Q=mat(rand,.20);this.K=mat(rand,.20);this.O=mat(rand,.20);this.M1=mat(rand,.12);this.M2=mat(rand,.12);this.last=Array.from({length:T},()=>new Array(D).fill(0));this.attention=new Array(T).fill(1/T);}
+ resetFast(){this.V=copy(this.baseV);this.last=Array.from({length:T},()=>new Array(D).fill(0));}
+ relax(rate){for(let i=0;i<D;i++)for(let j=0;j<D;j++)this.V[i][j]+=(this.baseV[i][j]-this.V[i][j])*rate;}
  forward(tokens){const x=tokens.map(t=>norm(t));const q=x.map(v=>project(v,this.Q)),k=x.map(v=>project(v,this.K)),v=x.map(v=>project(v,this.V));let attLast=[];
   const hidden=x.map((input,t)=>{const aggregate=new Array(D).fill(0);const combined=[];
    for(let h=0;h<2;h++){
@@ -61,20 +63,71 @@ class AttentionBrain{
  energy(){let s=0;for(const row of this.last)for(const x of row)s+=x*x;return Math.sqrt(s/(T*D));}
 }
 class Muru{
- constructor(options={}){this.seed=options.seed||314159;this.w=options.w||24;this.h=options.h||16;this.rand=rng(this.seed^0x678ba);this.eye=new AttentionBrain(this.seed+7);this.body=new AttentionBrain(this.seed+11);this.preferences=new Array(8).fill(0);this.archive=[];this.episodes=0;this.steps=0;this.dreams=0;this.lastGain=0;this.coupling=.65;this.writeRate=.18;this.mode='mutual';this.policy='muru';this.lastChoice=-1;this.mood='watching';this.curiosity=1;this.newWorld(options.worldSeed||91,options.kind);}
- newWorld(seed=this.seed+this.episodes*37,kind){this.world=makeScene(seed,this.w,this.h,kind);this.episodes++;this.obs=new Map();this.lastChoice=-1;this.history=[];this.posterior=new Array(FAMILIES.length).fill(1/FAMILIES.length);this.logs=new Array(FAMILIES.length).fill(0);this.updateBrains(null,false);return this.snapshot();}
- // Token construction uses ONLY templates, observations and model state.
- tokens(){const tokens=[];for(let k=0;k<5;k++){const t=new Array(D).fill(0);t[0]=this.posterior[k]*3;t[1]=k/5;t[2]=Math.sin(k*1.9);t[3]=Math.cos(k*1.9);t[4]=entropy(this.posterior);t[10]=this.preferences[k];tokens.push(t);}
-  const recent=this.history.slice(-11);for(let t=0;t<11;t++){
-    const v=new Array(D).fill(0),o=recent[t];if(o){const f=keyFeatures(o.index,this.w,this.h);for(let j=0;j<f.length;j++)v[j]=f[j]*2-1;v[8]=o.value*2-1;v[9]=o.predicted*2-1;v[10]=clamp(o.gain,0,2);v[11]=(o.value-o.predicted)*2;v[12]=o.index/(this.w*this.h);v[13]=this.history.length/(this.w*this.h);v[14]=this.episodes/10;v[15]=1;}
-    tokens.push(v);
-  }return tokens;
+ constructor(options={}){
+  this.seed=options.seed||314159;this.w=options.w||24;this.h=options.h||16;this.rand=rng(this.seed^0x678ba);
+  this.eye=new AttentionBrain(this.seed+7);this.body=new AttentionBrain(this.seed+11);
+  // Body never receives observations, pixel values, posterior or the world's hypothesis templates.
+  // It retains only slowly integrated messages extracted from Eye *activations*.
+  this.bodyMemory=Array.from({length:T},()=>new Array(D).fill(0));
+  this.bodyGuide=new Array(8).fill(0);this.bodyPlasticity=1;this.latestMessage=new Array(D).fill(0);
+  this.preferences=new Array(8).fill(0);this.archive=[];this.episodes=0;this.steps=0;this.dreams=0;this.lastGain=0;
+  this.coupling=.65;this.writeRate=.18;this.mode='mutual';this.policy='muru';this.lastChoice=-1;this.mood='watching';this.curiosity=1;
+  this.newWorld(options.worldSeed||91,options.kind);
  }
- updateBrains(input,allowWrite=true){const tokens=this.tokens();const bodyTokens=tokens.map((v,i)=>v.map((z,j)=>z*(j%3===0?-.8:1)+(j===7?this.preferences[i%8]:0)));
-  const a=this.eye.forward(tokens),b=this.body.forward(bodyTokens);
-  if(allowWrite&&(this.mode==='mutual'||this.mode==='eye-to-body'))this.body.writeFrom(a,this.coupling,this.writeRate);
-  if(allowWrite&&(this.mode==='mutual'||this.mode==='body-to-eye'))this.eye.writeFrom(b,this.coupling,this.writeRate);
-  this.energies={eye:this.eye.energy(),body:this.body.energy(),eyeDrift:this.eye.drift(),bodyDrift:this.body.drift()};
+ newWorld(seed=this.seed+this.episodes*37,kind){
+  this.world=makeScene(seed,this.w,this.h,kind);this.episodes++;
+  this.obs=new Map();this.lastChoice=-1;this.history=[];
+  this.posterior=new Array(FAMILIES.length).fill(1/FAMILIES.length);this.logs=new Array(FAMILIES.length).fill(0);
+  // The Eye forgets its short-term synaptic trace. The Body keeps its slow memory and weights.
+  this.eye.resetFast();this.updateBrains(null,false);return this.snapshot();
+ }
+ eyeTokens(){
+  // Fixed spatial probes plus the LAST FOUR measured pixels. No posterior, old observations,
+  // archive, Body memory, or hidden truth is available in the Eye's sensory token stream.
+  const tokens=[];
+  for(let i=0;i<T-EYE_SPAN;i++){
+   const x=(i%4+.5)/4,y=(Math.floor(i/4)+.5)/3,v=new Array(D).fill(0);
+   v[0]=2*x-1;v[1]=2*y-1;v[2]=Math.sin(2*Math.PI*x);v[3]=Math.cos(2*Math.PI*x);
+   v[4]=Math.sin(2*Math.PI*y);v[5]=Math.cos(2*Math.PI*y);v[8]=-1;v[9]=(i+1)/(T-EYE_SPAN);tokens.push(v);
+  }
+  const recent=this.history.slice(-EYE_SPAN),pad=EYE_SPAN-recent.length;
+  for(let t=0;t<EYE_SPAN;t++){
+   const v=new Array(D).fill(0),o=t>=pad?recent[t-pad]:null;
+   if(o){const f=keyFeatures(o.index,this.w,this.h);for(let j=0;j<8;j++)v[j]=f[j]*2-1;
+    v[8]=o.value*2-1;v[9]=1;v[10]=(t+1)/EYE_SPAN;v[11]=o.index/(this.w*this.h);}
+   tokens.push(v);
+  }
+  return tokens;
+ }
+ updateBrains(event=null,allowWrite=true){
+  const a=this.eye.forward(this.eyeTokens());
+  if(event){
+   // Sensory uplink: a single 16D *processed* message, not the Eye's input pixels.
+   // Sixteen independent exponential traces have time constants ~8..115 looks.
+   const msg=new Array(D).fill(0);
+   for(let j=0;j<D;j++)msg[j]=.65*a[T-1][j]+.35*(a[T-4][j]+a[T-3][j]+a[T-2][j]+a[T-1][j])/4;
+   this.latestMessage=msg;
+   for(let i=0;i<T;i++){
+    const rate=.12*Math.pow(.84,i);
+    for(let j=0;j<D;j++)this.bodyMemory[i][j]+=(msg[j]-this.bodyMemory[i][j])*rate;
+   }
+  }
+  const b=this.body.forward(this.bodyMemory);
+  // A clamp blocks Body->Eye regulation as well as cross-writes. The Eye->Body sensory
+  // uplink remains open in all modes so the Body can keep its private internal trace.
+  const bodyCanControl=this.coupling>0&&(this.mode==='mutual'||this.mode==='body-to-eye');
+  this.bodyGuide=bodyCanControl?b[T-1].slice(0,8):new Array(8).fill(0);
+  this.bodyPlasticity=bodyCanControl?clamp(1+.65*b[T-1][8],.55,1.45):1;
+  if(allowWrite){
+   // The Eye is intrinsically leaky; even if the cross-writes are clamped,
+   // old fast weights relax rather than remain a hidden long-term store.
+   this.eye.relax(.34);
+   if(this.mode==='mutual'||this.mode==='eye-to-body')this.body.writeFrom(a,this.coupling,this.writeRate*.16);
+   if(bodyCanControl)this.eye.writeFrom(b,this.coupling,this.writeRate*this.bodyPlasticity);
+  }
+  this.energies={eye:this.eye.energy(),body:this.body.energy(),eyeDrift:this.eye.drift(),bodyDrift:this.body.drift(),
+   bodyMemoryRms:Math.sqrt(this.bodyMemory.reduce((s,row)=>s+row.reduce((t,z)=>t+z*z,0),0)/(T*D)),
+   plasticity:this.bodyPlasticity};
  }
  predict(){const p=new Array(this.w*this.h).fill(0);for(let k=0;k<FAMILIES.length;k++)for(let i=0;i<p.length;i++)p[i]+=this.posterior[k]*this.world.templates[k][i];return p;}
  posteriorVariance(index){let m=0,v=0;for(let k=0;k<FAMILIES.length;k++)m+=this.posterior[k]*this.world.templates[k][index];for(let k=0;k<FAMILIES.length;k++)v+=this.posterior[k]*(this.world.templates[k][index]-m)**2;return v;}
@@ -88,9 +141,10 @@ class Muru{
   if(this.policy==='muru'){
     const feat=keyFeatures(index,this.w,this.h);
     const preference=feat.reduce((s,z,j)=>s+z*this.preferences[j],0)/8;
-    const row=this.eye.last[(index%T)],other=this.body.last[Math.floor(index/this.w)%T];
-    const neural=feat.reduce((s,z,j)=>s+z*(row[j]-other[j]),0)/8;
-    score+=.035*this.curiosity*neural+.06*preference;
+    // Body's slow private memory can steer the Eye only through a live Body->Eye port.
+    // The Bayesian posterior remains a separate explicit baseline, not a Body input.
+    const guidance=feat.reduce((s,z,j)=>s+z*this.bodyGuide[j],0)/8;
+    score+=.10*this.curiosity*guidance+.06*preference;
     if(this.lastChoice>=0){const dx=index%this.w-this.lastChoice%this.w,dy=Math.floor(index/this.w)-Math.floor(this.lastChoice/this.w);score-=.004*Math.hypot(dx,dy)/Math.hypot(this.w,this.h);}
   }
   return score;
@@ -124,8 +178,19 @@ class Muru{
  setPolicy(policy){if(!['muru','variance','random','raster'].includes(policy))throw Error('Invalid policy');this.policy=policy;}
  getMaps(){const predicted=this.predict(),truth=this.world.peek(),variance=predicted.map((_,i)=>this.posteriorVariance(i));return {predicted,truth,variance,seen:[...this.obs.entries()]};}
  snapshot(){return {posterior:this.posterior.slice(),entropy:entropy(this.posterior),looks:this.obs.size,mood:this.mood,energies:{...this.energies},preferences:this.preferences.slice(),lastChoice:this.lastChoice,kind:this.world.kind,seed:this.world.seed,psnr:this.world.evaluate(this.predict(),this.obs).psnr,episodes:this.episodes,dreams:this.dreams};}
- saveHabit(){return {version:1,preferences:this.preferences.slice(),archive:this.archive.slice(-200),episodes:this.episodes};}
- loadHabit(s){if(!s||s.version!==1||!Array.isArray(s.preferences)||s.preferences.length!==8)return false;this.preferences=s.preferences.map(x=>Number.isFinite(x)?clamp(x,-1,1):0);if(Array.isArray(s.archive))this.archive=s.archive.filter(x=>Number.isInteger(x.index)&&Number.isFinite(x.value)&&Number.isFinite(x.gain)).slice(-200);return true;}
+ saveHabit(){return {version:2,preferences:this.preferences.slice(),archive:this.archive.slice(-200),episodes:this.episodes,
+  bodyMemory:copy(this.bodyMemory),bodyValueWeights:copy(this.body.V)};}
+ loadHabit(s){
+  if(!s||![1,2].includes(s.version)||!Array.isArray(s.preferences)||s.preferences.length!==8)return false;
+  this.preferences=s.preferences.map(x=>Number.isFinite(x)?clamp(x,-1,1):0);
+  if(Array.isArray(s.archive))this.archive=s.archive.filter(x=>Number.isInteger(x.index)&&Number.isFinite(x.value)&&Number.isFinite(x.gain)).slice(-200);
+  const valid=m=>Array.isArray(m)&&m.length===T&&m.every(row=>Array.isArray(row)&&row.length===D&&row.every(Number.isFinite));
+  if(s.version===2){
+   if(valid(s.bodyMemory))this.bodyMemory=s.bodyMemory.map(row=>row.map(x=>clamp(x,-2,2)));
+   if(valid(s.bodyValueWeights))this.body.V=s.bodyValueWeights.map(row=>row.map(x=>clamp(x,-2,2)));
+  }
+  this.updateBrains(null,false);return true;
+ }
  resetMind(){const seed=this.seed,worldSeed=this.world.seed,kind=this.world.kind;this.constructorReset(seed,worldSeed,kind);}
  constructorReset(seed,worldSeed,kind){const replacement=new Muru({seed,worldSeed,kind,w:this.w,h:this.h});Object.assign(this,replacement);}
 }
@@ -136,6 +201,5 @@ function benchmark({seeds=[17,29,41,53,67],looks=16,w=24,h=16}={}){
   results.push({mode,policy,looks,worlds:count,mse:mse/count,psnr:psnr/count,entropy:entropySum/count});
  }return results;
 }
-return {Muru,AttentionBrain,makeScene,benchmark,entropy,FAMILIES,rng,D,T};
+return {Muru,AttentionBrain,makeScene,benchmark,entropy,FAMILIES,rng,D,T,EYE_SPAN};
 });
-

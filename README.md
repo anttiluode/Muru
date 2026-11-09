@@ -1,59 +1,72 @@
-# Muru · A little artificial curiosity
+# Muru v2 · An Eye that forgets, a Body that remembers
 
-It is live at: https://anttiluode.github.io/Muru/
+**[Open Muru](https://anttiluode.github.io/Muru/)** · [Offline entry point](index.html) · [v2 measurements](RESULTS_V2.md) · [v1 measurements](RESULTS.md)
 
-**[Offline laboratory source](index.html)** · [GitHub repository](https://github.com/anttiluode/Muru) · [Measured v1 results](RESULTS.md) · [Research constraints](#what-is-real-and-what-is-not)
+Muru is an **offline research pet**, not an LLM pretending to have feelings. Two small, *untrained* attention networks now have asymmetrical jobs: the Eye briefly senses the outside world; the Body retains only processed signals received from the Eye, and can regulate the Eye's future attention and fast-weight plasticity. Every mechanism is inspectable in plain JavaScript.
 
-An experiment in building a *pet* from computation rather than a character-playing chatbot. Muru lives in a 24×16 hidden world, chooses individual pixels to measure, learns a modest preference from useful observations, and has two tiny attention networks that can rewrite each other's fast weights.
+## Try it
 
-![No dependencies](https://img.shields.io/badge/dependencies-none-6bdfbb) ![Offline](https://img.shields.io/badge/offline-yes-6bdfbb)
+Open `index.html` in Chrome, Edge or Firefox. No build tools, network, cloud GPU, API keys, or packages are required. Or use the [GitHub Pages laboratory](https://anttiluode.github.io/Muru/) if Pages is enabled.
 
-## Run
+1. **Look once / Explore 20:** reveal a pixel and advance both organs. Compare the two weight heatmaps with the **Body / slow memory** heatmap below them.
+2. **New world:** Eye loses its recent sensory buffer and fast-weight changes; Body retains its slow state and changed weights.
+3. **Switch coupling:** `mutual`, `eye → body`, `body → eye`, `clamped`. Clamping stops cross-writes and disables Body steering. Eye→Body *sensory communication stays on*, even when weight coupling is clamped.
+4. **Dream 20:** run the internal loop and rehearse the simple preference trace without reading any new pixels. Dreams **do not** inject archived pixels back into the Eye or Body memory.
+5. **Run 5-world comparison:** benchmark random, raster, Bayesian variance, and Muru on equal observation budgets. **Do not assume that Muru beats the baseline.**
 
-Download this repository and **open `index.html` in your browser**. No server, GPU, framework, account, internet, or installation required. Browsers that restrict `localStorage` for `file://` still run the simulation; persistence may be disabled.
+### Architecture: the missing division of labor
 
-**GitHub Pages setup:** this new repository still needs a one-time owner action: open **Settings → Pages**, set the build source to **GitHub Actions**, then go to **Actions → Deploy Pages → Run workflow**. The first automatic Pages attempt failed because the workflow token did not have permission to create the Pages site. This does not affect offline use or tests.
+```text
+                        HIDDEN 24 × 16 WORLD
+                          │ read one pixel
+                          ▼
+                   EYE — FAST (16×16)
+                 latest 4 events, no older
+                 sensor history in input
+                          │
+                  compressed 16D message
+                          ▼
+           BODY — PRIVATE SLOW TRACE (16×16)
+          16 EMA timescales ≈ 8–115 looks
+                  │              │
+          Body's value matrix      │
+          stores long-term state   │
+                  │              │
+                  └── feedback ────┘
+                    Eye's next-look bias
+                    + gated fast plasticity
+```
 
-- **Look once / Explore 20:** Muru makes actual measurements and updates its belief among five world hypotheses.
-- **Dream 20:** replays a tiny summary of prior measurements, changing the fast weights and preference trace without receiving new sensory evidence.
-- **New world:** preserves learned habits and fast weights, clears this world's observations.
-- **Reset mind:** discards fast weights and habits and restarts seeded networks.
-- **Show actual world:** human-only debug view; it does not feed the observation policy.
-- **Coupling:** choose mutual, either one-way direction, or clamp both. Adjust its write strength.
-- **Policy:** switch between Muru, pure statistical disagreement, random, and raster. Click any tile to override the chosen next look.
-- **Run comparison:** a reproducible five-world, equal-budget check of four policies under mutual vs clamped coupling. Results are computed locally, not pre-rendered.
+- **Eye:** one 16-token, 16-channel, **two-head causal attention** block. Its first 12 tokens are fixed spatial probes; the last four carry only the four latest sensed pixel values and their locations. Earlier observations, posterior beliefs, saved archive, and Body memory are **not passed to the Eye tokens**. Its `W_V` fast matrix relaxes toward its random base at each tick and resets when a new world starts.
+- **Sensory uplink:** the Eye's 16×16 *processed activation sheet* is pooled to one 16D signal. No raw pixel, `world.peek()`, posterior or hypothesis map is passed directly into the Body. The `look()` sensor closure is still the only access to the chosen hidden pixel.
+- **Body:** a second independent 16-token, 16-channel, two-head attention block. It receives only a bank of 16 exponential moving averages of the Eye's processed messages, updated at different rates: faster top rows, slower bottom rows. The Body's own `W_V` is changed **more slowly** than the Eye's. Body memory and weights survive new worlds.
+- **Controller:** Body activations generate an eight-channel bias in Muru's spatial look-scoring formula and a bounded multiplier for Body→Eye fast-weight updates. The random controller is **not trained** to be optimal. Body regulation is switched off when Body→Eye is clamped or coupling is zero.
+- **Separate statistical notebook:** for controlled comparisons, Muru retains an explicit Bayesian posterior over five known synthetic world templates and a simple eight-value preference heuristic. Those mathematical state variables can remember all observed pixels; **they are not the Eye's sensory token memory and they are not direct Body inputs**. The variance baseline uses the same posterior. This is not a fully autonomous, end-to-end learned agent.
 
-## What is implemented
+### Read the three matrix displays correctly
 
-- **Two independent 16-channel transformer-style blocks,** each with 16 time-position tokens, two causal scaled-dot-product attention heads (8 channels each), learned-*looking* but initially **random** Q, K, V, O projections, layer normalization, and a small MLP. These weights are not pretrained on language.
-- **Matrix-to-matrix coupling:** each network produces a 16×16 activation matrix. At a tick, the Eye's activation matrix moves the Body's 16×16 value projection (`W_V`) toward `base + gain × tanh-like activity` by a bounded exponential update, and vice versa. Clamp prohibits further cross-writes. This is **fast-weight modulation, not backpropagation**.
-- **One-pixel eye:** five known synthetic prototype maps are the agent's hypotheses. The environment privately chooses one and adds unmodeled pixel noise. Muru sees only its prior hypothesis maps and revealed observations; the hidden picture is held in a sensor closure. Posterior beliefs update with an explicit Gaussian likelihood.
-- **A strong mathematical baseline:** next-observation score is weighted variance of the competing hypotheses, with a small coarse-detail term. Muru adds an attention-derived bias and a persistent, eight-component preference trace strengthened only when a look actually reduces hypothesis entropy. Preference learning is a deliberately simple heuristic, not a claim of a new cognitive learning law.
-- **Inspectability:** posterior bars, PSNR, uncertainty history, and separate Eye/Body fast-weight delta heat maps. Tiny habits save in browser local storage and can be exported as JSON.
+`EYE / value-weight change` and `BODY / value-weight change` show `current W_V − initial W_V`, *not* the absolute weights and not activity moving vertically between layers. **Rows are token/feature positions.** `BODY / slow memory (not weights)` shows the actual internal EMA memory used as the Body's input: row 1 changes quickly, row 16 retains older processed impressions. It is a separate object from the Body's `W_V`.
 
-## The precise question
+A transition to `clamped` stops new cross-writes and Body steering, but the Eye's existing fast changes still **decay**. `eye → body` writes only Body weights; `body → eye` writes only Eye weights, though the one-way sensory uplink to Body remains present in every setting.
 
-> Can mutually coupled changing weight matrices influence where an active sensing agent chooses to look, and can their coupled dynamics exhibit behavior that disappears when a feedback direction is clamped?
+## Experiments and scientific caution
 
-**First outcome: no meaningful advantage in the initial five-world benchmark; see [RESULTS.md](RESULTS.md).** A visual difference between mutual and clamped behavior alone is not evidence of emergent intelligence or autonomous learning. It can simply result from an explicit state perturbation. The included controls make this distinction inspectable. A stronger follow-up experiment should isolate the coupled subsystem, replay an *identical fixed input stream*, compare attractors and clamp interventions, and report results over many seeds.
+The former *twin inputs* shortcut is gone. [RESULTS_V2.md](RESULTS_V2.md) records the deterministic local checks, a fixed-observation clamp intervention, and the first v2 benchmark. [RESULTS.md](RESULTS.md) retains the original v1 baseline. The `Muru` policy is still approximately tied with a very simple statistical selection rule. Differences in heatmaps or chosen locations do **not** prove learning, animal-like cognition, or a biologically realistic nervous system.
 
-## What is real and what is not
-
-| Claim | Status |
+| Property | What is established |
 |---|---|
-| Two working multi-head attention networks | Implemented, untrained |
-| Matrix-to-matrix cross-writes | Implemented and bounded |
-| Chooses where to measure using previously visible information | Implemented, boundary tested |
-| An explicit posterior with a variance baseline | Implemented for a five-prototype synthetic world |
-| Habit changes from useful observations | Implemented as simple hand-designed update |
-| Memories persist between new worlds | Small browser preference trace; **fast weights do not persist across reloads** |
-| Genuine emotion, consciousness, autonomous goals | **Not claimed** |
-| Proven benefit of cross-wiring over statistical sensing | **Not established** |
-| Generalization to unknown real photographs | **Not tested** |
+| Eye takes only four recent observations | Encoded and unit-tested |
+| Body gets no direct sensor samples | Encoded and unit-tested at its `forward()` input |
+| Body maintains state across new worlds | Implemented and tested |
+| Eye forgets fast weights on new worlds | Implemented and tested |
+| Body steers the Eye only with feedback enabled | Implemented and tested |
+| True coupled dynamics and memory traces | Observable; **not proof of emergence** |
+| Cognitive curiosity, emotion, consciousness | **Not claimed** |
+| A measured advantage over Bayesian selection | **Not established** |
 
-The "mood" display is a visualization derived from measured information gain and reconstruction surprise, not a report of subjective experience. Dreams are deterministic-ish rehearsal under a seeded local PRNG, not sleep, and do not deliver new information.
+**Browser persistence:** `saveHabit()` v2 includes the Body's memory and Body value-weight matrix, plus the prior small preference summary. Prior v1 browser saves load without discarding old habits. Fast Eye weights and live sensory observations do not persist across reloads. Saved measurements in the research archive are already observed values, never hidden/unobserved pixels. Reset Mind clears them.
 
-## Reproducible checks
+## Reproduce
 
 ```bash
 node --check core.js
@@ -61,10 +74,8 @@ node --check app.js
 node --test tests/core.test.cjs
 ```
 
-Node 22+ suggested. The GitHub Actions workflow repeats these checks. Browser logic is vanilla JavaScript and Canvas; no hosted dependencies are loaded. All evaluation reads of ground truth occur in the environment's scoring path, separate from the agent's selection path.
+Node 22+ recommended for tests; browser works without Node. GitHub Actions runs the same checks. Sources: [`core.js`](core.js) (simulation), [`app.js`](app.js) (UI), [`tests/core.test.cjs`](tests/core.test.cjs).
 
-## Lineage
+Built from the SihtiSilma active-eye experiments, OneTinyTransformer, feedback homeostasis, and Denis Noble's cardiac clamp thought experiment. The artificial pet is not a biological heart or evidence of artificial consciousness.
 
-Built as a playful experimental continuation of [SihtiSilma](https://github.com/anttiluode/SihtiSilma), the OneTinyTransformer loop experiments, the homeostatic ECG reduction, and the discussion of two transformers coupled through each other's matrices. The idea also invites the sort of clamp intervention discussed in Denis Noble's *A Theory of Biological Relativity: No Privileged Level of Causation* (Interface Focus, 2012). The artificial ring is **not** an implementation of cardiac physiology.
-
-MIT license; no model downloads and no online inference.
+MIT license.
