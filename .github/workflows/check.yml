@@ -15,4 +15,5 @@ jobs:
       - run: node --check app.js
       - run: node --check diagnostics.js
       - run: node --test tests/*.test.cjs
+      - run: node scripts/rank_report.cjs
 
