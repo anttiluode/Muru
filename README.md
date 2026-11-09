@@ -1,6 +1,6 @@
 # Muru · A little artificial curiosity
 
-**[Open the offline laboratory](index.html)** · [GitHub repository](https://github.com/anttiluode/Muru) · [Measured v1 results](RESULTS.md) · [Research constraints](#what-is-real-and-what-is-not)
+**[Offline laboratory source](index.html)** · [GitHub repository](https://github.com/anttiluode/Muru) · [Measured v1 results](RESULTS.md) · [Research constraints](#what-is-real-and-what-is-not)
 
 An experiment in building a *pet* from computation rather than a character-playing chatbot. Muru lives in a 24×16 hidden world, chooses individual pixels to measure, learns a modest preference from useful observations, and has two tiny attention networks that can rewrite each other's fast weights.
 
@@ -9,6 +9,8 @@ An experiment in building a *pet* from computation rather than a character-playi
 ## Run
 
 Download this repository and **open `index.html` in your browser**. No server, GPU, framework, account, internet, or installation required. Browsers that restrict `localStorage` for `file://` still run the simulation; persistence may be disabled.
+
+**GitHub Pages setup:** this new repository still needs a one-time owner action: open **Settings → Pages**, set the build source to **GitHub Actions**, then go to **Actions → Deploy Pages → Run workflow**. The first automatic Pages attempt failed because the workflow token did not have permission to create the Pages site. This does not affect offline use or tests.
 
 - **Look once / Explore 20:** Muru makes actual measurements and updates its belief among five world hypotheses.
 - **Dream 20:** replays a tiny summary of prior measurements, changing the fast weights and preference trace without receiving new sensory evidence.
@@ -64,4 +66,3 @@ Node 22+ suggested. The GitHub Actions workflow repeats these checks. Browser lo
 Built as a playful experimental continuation of [SihtiSilma](https://github.com/anttiluode/SihtiSilma), the OneTinyTransformer loop experiments, the homeostatic ECG reduction, and the discussion of two transformers coupled through each other's matrices. The idea also invites the sort of clamp intervention discussed in Denis Noble's *A Theory of Biological Relativity: No Privileged Level of Causation* (Interface Focus, 2012). The artificial ring is **not** an implementation of cardiac physiology.
 
 MIT license; no model downloads and no online inference.
-
