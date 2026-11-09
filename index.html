@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071411"><meta name="description" content="Muru: a curious artificial pet built from two coupled attention networks. An offline, inspectable active sensing experiment.">
+  <title>Muru — a little artificial curiosity</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="shell">
+  <header class="topbar"><div class="identity"><span class="mark" aria-hidden="true">◉</span><span><strong>MURU</strong><small>the curiosity laboratory</small></span></div><div class="topright"><span class="status-dot"></span><span>LOCAL · NO SERVER</span><a href="https://github.com/anttiluode/Muru" target="_blank" rel="noopener">SOURCE ↗</a></div></header>
+  <section class="hero"><div><div class="eyebrow">EXPERIMENT 001 / TWO MINDS, ONE LITTLE CREATURE</div><h1>Meet <em>Muru.</em></h1><p>A tiny creature that looks at a mysterious world, remembers what helped, and lets two transformer brains gently rewrite each other. No scripts telling it to like flowers. Just a testable curiosity.</p></div><div class="portrait"><canvas id="portrait" width="190" height="160" aria-label="An animated illustration of Muru"></canvas><div class="portrait-label">CURRENT MOOD <strong id="mood">watching</strong></div></div></section>
+  <section class="metrics" aria-label="Live measurements">
+    <div class="metric"><span>LOOKS MADE</span><b id="looks">0 <small>/ 384</small></b></div>
+    <div class="metric"><span>WORLD UNCERTAINTY</span><b id="uncertainty">1.609 <small>nats</small></b></div>
+    <div class="metric"><span>RECONSTRUCTION</span><b id="psnr">— <small>dB PSNR</small></b></div>
+    <div class="metric"><span>MUTUAL WEIGHT DRIFT</span><b id="drift">0.000 <small>RMS</small></b></div>
+  </section>
+  <div class="layout">
+    <main class="mainpanel">
+      <section class="panel field"><div class="panel-head"><div><span class="eyebrow">01 / THE UNKNOWN</span><h2>Where should I look?</h2></div><div class="microstatus"><span class="dot"></span><span id="sceneLabel">New mystery</span></div></div>
+        <div class="canvas-wrap"><canvas id="world" width="960" height="640" tabindex="0" role="img" aria-label="Muru's predicted world. Click a cell to make Muru observe it."></canvas><div class="canvas-tag">PREDICTED WORLD <span>•</span> bright tiles = measured</div><div class="canvas-info" id="worldHint">Muru has never seen this place.</div></div>
+        <div class="toolbar"><button id="look" class="primary">◉&nbsp; Look once</button><button id="play">▶&nbsp; Explore 20</button><button id="dream">☾&nbsp; Dream 20</button><button id="newWorld" class="ghost">↻ New world</button><label class="peek"><input id="peek" type="checkbox"> Show actual world</label></div>
+        <div class="note"><span class="note-icon">!</span><div>The eye chooses a cell using <strong>only its hypotheses and previous observations</strong>. Actual pixels cross the boundary only after a look. “Show actual world” is a human-only debug view; it does not feed the policy.</div></div>
+      </section>
+      <section class="panel charts"><div class="panel-head"><div><span class="eyebrow">02 / LEARNING TRACE</span><h2>What changed after looking?</h2></div></div><canvas id="trace" width="960" height="240" role="img" aria-label="Live history of world uncertainty and reconstruction quality"></canvas><div class="chart-key"><span><i class="key-teal"></i> Posterior uncertainty</span><span><i class="key-coral"></i> PSNR (right scale)</span></div></section>
+      <section class="panel benchmark"><div class="panel-head"><div><span class="eyebrow">03 / REALITY CHECK</span><h2>Does the pet beat a simple formula?</h2></div><button id="benchmark" class="outline">Run 5-world comparison</button></div><p>The same hidden worlds, the same 12-look budget. Random, raster, Bayesian variance, and Muru, each with mutual coupling or both directions clamped. This benchmark is diagnostic—not a training set.</p><div id="benchmarkResults" class="results-placeholder">Run the comparison to get measured results. Nothing is prefilled.</div></section>
+    </main>
+    <aside class="sidebar">
+      <section class="panel settings"><span class="eyebrow">EXPERIMENT CONTROLS</span><h2>How Muru thinks</h2>
+        <label for="policy">Looking policy</label><select id="policy"><option value="muru">Muru · variance + habit + attention</option><option value="variance">Bayesian variance · no pet</option><option value="random">Seeded random</option><option value="raster">Raster scan</option></select>
+        <label for="mode">Brain coupling</label><select id="mode"><option value="mutual">↔ Both directions (Ouroboros)</option><option value="eye-to-body">→ Eye rewrites Body</option><option value="body-to-eye">← Body rewrites Eye</option><option value="clamped">⊘ Clamp both directions</option></select>
+        <div class="slide-label"><label for="coupling">Weight coupling</label><output id="couplingValue">0.65</output></div><input type="range" id="coupling" min="0" max="1" value="0.65" step="0.05">
+        <div class="slide-label"><label for="curiosity">Pet influence on looking</label><output id="curiosityValue">1.00</output></div><input type="range" id="curiosity" min="0" max="2" value="1" step="0.1">
+        <p class="hint">Changing coupling does not retrain or erase the brains. A clamp prevents new cross-writes; existing fast weights remain until reset.</p>
+        <div class="button-row"><button id="reset" class="outline">Reset mind</button><button id="download" class="outline">Export memory</button></div>
+      </section>
+      <section class="panel beliefs"><span class="eyebrow">BELIEF ABOUT THE WORLD</span><h2>Five possible realities</h2><div id="hypotheses" class="bars"></div><div class="hint" id="beliefCaption">A blank slate: no clue which world this is.</div></section>
+      <section class="panel neurons"><span class="eyebrow">TWO ATTENTION NETWORKS</span><h2>Thoughts become wiring</h2><div class="network-diagram"><div class="node eye-node"><span>01</span><b>EYE</b><small>sees evidence</small></div><div class="exchange"><span>⇄</span><small id="linkLabel">mutual write</small></div><div class="node body-node"><span>02</span><b>BODY</b><small>carries history</small></div></div>
+        <p class="hint">Each brain has real 2-head, causal, scaled dot-product attention (16 tokens × 16 channels). At each look, one brain's 16×16 activity sheet nudges the other's 16×16 value-weight matrix.</p><div class="matrix-title"><span>EYE / value-weight change</span><output id="eyeDrift">0.000</output></div><canvas id="eyeMatrix" class="matrix" width="320" height="320"></canvas><div class="matrix-title"><span>BODY / value-weight change</span><output id="bodyDrift">0.000</output></div><canvas id="bodyMatrix" class="matrix" width="320" height="320"></canvas><div class="heat-key"><span>− shift</span><div></div><span>+ shift</span></div>
+      </section>
+      <section class="panel memories"><span class="eyebrow">SLOW HABIT / LONGER-TERM TRACE</span><h2>What Muru remembers</h2><div id="habit" class="habit"></div><div class="hint" id="dreamCounter">0 dreams. The browser stores just Muru's small preference trace and past measurements, not images or private data.</div></section>
+    </aside>
+  </div>
+  <footer><span>MURU LAB · v1.0 · Offline, inspectable, deliberately tiny</span><span>Not conscious · not a language model · not a demonstrated new learning law</span></footer>
+</div>
+<script src="core.js"></script><script src="app.js"></script>
+</body></html>
+
